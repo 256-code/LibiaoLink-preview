@@ -1,0 +1,136 @@
+diff --git a/index.html b/index.html
+index 1c1f0f3..d1c9cf5 100644
+--- a/index.html
++++ b/index.html
+@@ -4,7 +4,7 @@
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <link rel="icon" type="image/svg+xml" href="/libiaolink-logo.svg" />
+-    <title>LibiaoLink 立镖全链路信息平台</title>
++    <title>LibiaoLink 立镖全链路信息平台（前端演示）</title>
+   </head>
+   <body>
+     <div id="root"></div>
+diff --git a/src/api.ts b/src/api.ts
+index c248722..c1216e2 100644
+--- a/src/api.ts
++++ b/src/api.ts
+@@ -5,6 +5,8 @@
+  * 契约来源：shared/src/modules/identity.ts。
+  */
+ 
++import { DEMO_MODE, demoMeResponse } from "./demo";
++
+ const CSRF_COOKIE = "ll_csrf";
+ const CSRF_HEADER = "X-CSRF-Token";
+ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+@@ -24,6 +26,10 @@ export function readCookie(name: string): string | null {
+ 
+ /** fetch 封装：同源 Cookie + CSRF 头 + Accept: application/json。 */
+ export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
++  // 演示模式：预览站没有后端，会话校验由本地伪响应承担（见 src/demo.ts）。
++  if (DEMO_MODE && input === "/auth/me") {
++    return demoMeResponse();
++  }
+   const method = (init.method ?? "GET").toUpperCase();
+   const headers = new Headers(init.headers);
+   if (!headers.has("Accept")) {
+@@ -40,6 +46,10 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
+ 
+ /** 跳 SSO 登录（带 returnTo，登录后回到当前页面）。 */
+ export function redirectToLogin(): void {
++  // 演示模式没有 SSO 登录页：跳转会落到 404，直接留在当前页面。
++  if (DEMO_MODE) {
++    return;
++  }
+   const returnTo = window.location.pathname + window.location.search + window.location.hash;
+   window.location.replace("/auth/login?returnTo=" + encodeURIComponent(returnTo));
+ }
+diff --git a/src/components/AppHeader.tsx b/src/components/AppHeader.tsx
+index 20b0659..ccaedad 100644
+--- a/src/components/AppHeader.tsx
++++ b/src/components/AppHeader.tsx
+@@ -1,5 +1,6 @@
+ import { useEffect, useRef, useState } from "react";
+ import type { MouseEvent as ReactMouseEvent } from "react";
++import { DEMO_MODE } from "../demo";
+ import { clearHomePrefs } from "../homePrefs";
+ import { goBackToList, goUpLevel, listHref, upLevelHref } from "../useHashRoute";
+ import type { MeResponse, Project } from "../types";
+@@ -56,7 +57,7 @@ export function AppHeader({ me, project, title }: AppHeaderProps) {
+     <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur">
+       <div className="flex h-16 items-center gap-3 px-6">
+         <a href={upHref} onClick={interceptNav(goUpLevel)} title="返回上一层级" className="flex shrink-0 items-center gap-3">
+-          <img src="/libiaolink-logo.svg" alt="LibiaoLink" className="h-11 w-auto" />
++          <img src={import.meta.env.BASE_URL + "libiaolink-logo.svg"} alt="LibiaoLink" className="h-11 w-auto" />
+           <div className="leading-tight">
+             <p className="text-base font-semibold text-zinc-900">LibiaoLink</p>
+             <p className="text-xs text-zinc-500">立镖全链路信息平台</p>
+@@ -101,17 +102,21 @@ export function AppHeader({ me, project, title }: AppHeaderProps) {
+                 role="menu"
+                 className="menu-pop absolute right-0 top-full z-20 mt-2 w-36 overflow-hidden rounded-xl border border-zinc-200/80 bg-white p-1 shadow-[0_18px_40px_-12px_rgba(15,23,42,0.30),0_4px_12px_-4px_rgba(15,23,42,0.14)]"
+               >
+-                <a
+-                  role="menuitem"
+-                  href="/auth/logout"
+-                  onClick={() => {
+-                    // 退出登录清除本地记忆：多人共用设备时，避免把上一位用户的筛选选择带给下一位
+-                    clearHomePrefs();
+-                  }}
+-                  className="block rounded-lg px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
+-                >
+-                  退出登录
+-                </a>
++                {DEMO_MODE ? (
++                  <div className="block rounded-lg px-3 py-2 text-xs text-zinc-400">演示模式，无需登录</div>
++                ) : (
++                  <a
++                    role="menuitem"
++                    href="/auth/logout"
++                    onClick={() => {
++                      // 退出登录清除本地记忆：多人共用设备时，避免把上一位用户的筛选选择带给下一位
++                      clearHomePrefs();
++                    }}
++                    className="block rounded-lg px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
++                  >
++                    退出登录
++                  </a>
++                )}
+               </div>
+             ) : null}
+           </div>
+diff --git a/src/main.tsx b/src/main.tsx
+index 29ca501..04a214c 100644
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -1,6 +1,7 @@
+ import { StrictMode } from "react";
+ import { createRoot } from "react-dom/client";
+ import App from "./App";
++import { installDemoMode } from "./demo";
+ import "./app.css";
+ 
+ const container = document.getElementById("root");
+@@ -8,6 +9,9 @@ if (container === null) {
+   throw new Error("页面缺少 #root 容器");
+ }
+ 
++// 预览站：先装演示模式（提示带），再做首屏渲染。
++installDemoMode();
++
+ createRoot(container).render(
+   <StrictMode>
+     <App />
+diff --git a/vite.config.ts b/vite.config.ts
+index 58c05f5..764f237 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
+   const env = loadEnv(mode, process.cwd(), "");
+   const backendOrigin = env.BACKEND_ORIGIN === undefined || env.BACKEND_ORIGIN === "" ? "http://127.0.0.1:3001" : env.BACKEND_ORIGIN;
+   return {
++    // 部署基路径：GitHub Pages 项目站是 /LibiaoLink-preview/ 子路径；本地开发保持 "/"（取值见根 .env）。
++    base: env.VITE_BASE === undefined || env.VITE_BASE === "" ? "/" : env.VITE_BASE,
+     plugins: [react(), tailwindcss()],
+     server: {
+       port: 3000,

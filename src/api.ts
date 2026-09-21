@@ -5,6 +5,8 @@
  * 契约来源：shared/src/modules/identity.ts。
  */
 
+import { DEMO_MODE, demoMeResponse } from "./demo";
+
 const CSRF_COOKIE = "ll_csrf";
 const CSRF_HEADER = "X-CSRF-Token";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -24,6 +26,10 @@ export function readCookie(name: string): string | null {
 
 /** fetch 封装：同源 Cookie + CSRF 头 + Accept: application/json。 */
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  // 演示模式：预览站没有后端，会话校验由本地伪响应承担（见 src/demo.ts）。
+  if (DEMO_MODE && input === "/auth/me") {
+    return demoMeResponse();
+  }
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) {
@@ -40,6 +46,10 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
 
 /** 跳 SSO 登录（带 returnTo，登录后回到当前页面）。 */
 export function redirectToLogin(): void {
+  // 演示模式没有 SSO 登录页：跳转会落到 404，直接留在当前页面。
+  if (DEMO_MODE) {
+    return;
+  }
   const returnTo = window.location.pathname + window.location.search + window.location.hash;
   window.location.replace("/auth/login?returnTo=" + encodeURIComponent(returnTo));
 }

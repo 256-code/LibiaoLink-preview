@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const backendOrigin = env.BACKEND_ORIGIN === undefined || env.BACKEND_ORIGIN === "" ? "http://127.0.0.1:3001" : env.BACKEND_ORIGIN;
   return {
+    // 部署基路径：GitHub Pages 项目站是 /LibiaoLink-preview/ 子路径；本地开发保持 "/"（取值见根 .env）。
+    base: env.VITE_BASE === undefined || env.VITE_BASE === "" ? "/" : env.VITE_BASE,
     plugins: [react(), tailwindcss()],
     server: {
       port: 3000,

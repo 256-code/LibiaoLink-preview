@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
+import { DEMO_MODE } from "../demo";
 import { clearHomePrefs } from "../homePrefs";
 import { goBackToList, goUpLevel, listHref, upLevelHref } from "../useHashRoute";
 import type { MeResponse, Project } from "../types";
@@ -56,7 +57,7 @@ export function AppHeader({ me, project, title }: AppHeaderProps) {
     <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur">
       <div className="flex h-16 items-center gap-3 px-6">
         <a href={upHref} onClick={interceptNav(goUpLevel)} title="返回上一层级" className="flex shrink-0 items-center gap-3">
-          <img src="/libiaolink-logo.svg" alt="LibiaoLink" className="h-11 w-auto" />
+          <img src={import.meta.env.BASE_URL + "libiaolink-logo.svg"} alt="LibiaoLink" className="h-11 w-auto" />
           <div className="leading-tight">
             <p className="text-base font-semibold text-zinc-900">LibiaoLink</p>
             <p className="text-xs text-zinc-500">立镖全链路信息平台</p>
@@ -101,17 +102,21 @@ export function AppHeader({ me, project, title }: AppHeaderProps) {
                 role="menu"
                 className="menu-pop absolute right-0 top-full z-20 mt-2 w-36 overflow-hidden rounded-xl border border-zinc-200/80 bg-white p-1 shadow-[0_18px_40px_-12px_rgba(15,23,42,0.30),0_4px_12px_-4px_rgba(15,23,42,0.14)]"
               >
-                <a
-                  role="menuitem"
-                  href="/auth/logout"
-                  onClick={() => {
-                    // 退出登录清除本地记忆：多人共用设备时，避免把上一位用户的筛选选择带给下一位
-                    clearHomePrefs();
-                  }}
-                  className="block rounded-lg px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
-                >
-                  退出登录
-                </a>
+                {DEMO_MODE ? (
+                  <div className="block rounded-lg px-3 py-2 text-xs text-zinc-400">演示模式，无需登录</div>
+                ) : (
+                  <a
+                    role="menuitem"
+                    href="/auth/logout"
+                    onClick={() => {
+                      // 退出登录清除本地记忆：多人共用设备时，避免把上一位用户的筛选选择带给下一位
+                      clearHomePrefs();
+                    }}
+                    className="block rounded-lg px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
+                  >
+                    退出登录
+                  </a>
+                )}
               </div>
             ) : null}
           </div>
