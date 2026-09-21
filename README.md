@@ -13,8 +13,8 @@ LibiaoLink（立镖全链路信息平台）前端的**公开预览副本**：只
 
 代码差异只有两类：
 
-- 新增 `src/demo.ts`（演示模式：伪会话 + 提示带）；
-- 改动 `src/api.ts`、`src/main.tsx`、`src/components/AppHeader.tsx`、`index.html`、`vite.config.ts`，即 `preview/demo-mode.patch`。
+- 新增 `src/demo.tsx`（演示模式：伪会话 + 主页提示带）；
+- 改动 `src/api.ts`、`src/App.tsx`、`src/components/AppHeader.tsx`、`index.html`、`vite.config.ts`（提示带由 App.tsx 的 hub 分支渲染），即 `preview/demo-mode.patch`。
 
 ## 同步主仓最新前端
 

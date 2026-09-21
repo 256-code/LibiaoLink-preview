@@ -7,6 +7,7 @@ import { apiFetch, redirectToLogin } from "./api";
 import { Loader } from "./components/Loader";
 import { ProjectModal, type ProjectDraft } from "./components/ProjectModal";
 import { INITIAL_PROJECTS } from "./data/projects";
+import { DEMO_MODE, DemoBanner } from "./demo";
 import { useHashRoute } from "./useHashRoute";
 import { PROJECT_TYPE_ACCENTS } from "./types";
 import type { MeResponse, Project } from "./types";
@@ -180,7 +181,13 @@ export default function App() {
     );
 
   if (route.kind === "hub") {
-    return <Hub me={state.me} />;
+    // 演示模式：提示带只挂在入口页（主页），内页不显示。
+    return (
+      <>
+        {DEMO_MODE ? <DemoBanner /> : null}
+        <Hub me={state.me} />
+      </>
+    );
   }
 
   if (route.kind === "placeholder") {
