@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DateRangePicker } from "./DateRangePicker";
+import { SelectMenu, type SelectOption } from "./SelectMenu";
 import type { ReactNode } from "react";
 import {
   ISSUE_STATES,
@@ -10,7 +11,7 @@ import {
   type IssueState,
   type ReportState,
 } from "../data/reports";
-import type { ProjectTask } from "../data/tasks";
+import { ownersLabel, type ProjectTask } from "../data/tasks";
 import type { MeResponse, Project } from "../types";
 
 /**
@@ -72,6 +73,9 @@ const ISSUE_CATEGORIES: readonly string[] = [
   "生产原因",
   "其它",
 ];
+
+/** 下拉选项：与任务抽屉（任务状态 / 紧急重要度）、甘特内筛选同一套 SelectMenu 口径。 */
+const ISSUE_CATEGORY_OPTIONS: SelectOption[] = ISSUE_CATEGORIES.map((category) => ({ value: category, label: category }));
 
 /** 表单小框（与任务表行内编辑同一套「白底 + 淡灰描边」口径）。 */
 const FORM_INPUT =
@@ -548,7 +552,7 @@ function ReportFillForm({
                     className="h-3.5 w-3.5 shrink-0 accent-zinc-900"
                   />
                   <span className="min-w-0 flex-1 truncate">{task.title}</span>
-                  <span className="shrink-0 text-[10px] text-zinc-400">{task.owner === "" ? "待分配" : task.owner}</span>
+                  <span className="shrink-0 text-[10px] text-zinc-400" title={ownersLabel(task.owners, task.ownersEn)}>{task.owners.length === 0 ? "待分配" : task.owners.join("、")}</span>
                 </label>
               );
             })
@@ -600,20 +604,16 @@ function ReportFillForm({
             <span className={FORM_LABEL}>
               问题归类{issueFilled ? <span className="ml-1 text-rose-500">*</span> : null}
             </span>
-            <select
-              data-field="issueCategory"
-              value={draft.issueCategory}
-              onChange={(event) => onChange({ issueCategory: event.target.value })}
-              disabled={issueFilled === false}
-              className={FORM_INPUT + " mt-1 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"}
-            >
-              <option value="">{issueFilled ? "请选择问题归类" : "（「现场发现问题」非空时必填）"}</option>
-              {ISSUE_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
+            <div data-field="issueCategory" className="mt-1">
+              <SelectMenu
+                value={draft.issueCategory}
+                options={ISSUE_CATEGORY_OPTIONS}
+                onChange={(next) => onChange({ issueCategory: next })}
+                placeholder={issueFilled ? "请选择问题归类" : "（「现场发现问题」非空时必填）"}
+                disabled={issueFilled === false}
+                ariaLabel="选择问题归类"
+              />
+            </div>
           </label>
           <div>
             <span className={FORM_LABEL}>当前问题附图</span>

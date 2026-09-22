@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AppHeader } from "./components/AppHeader";
 import { ColumnPicker } from "./components/ColumnPicker";
+import { FocusModeToggle } from "./components/FocusModeToggle";
+import { GanttChart } from "./components/GanttChart";
 import { ReportIssuePanel } from "./components/ReportIssuePanel";
 import { TableScrollbar } from "./components/TableScrollbar";
 import { DEFAULT_VISIBLE_COLUMNS, ProjectSummary, TaskBoard, type ColumnKey, type TaskPatch, type VisibleColumns } from "./components/TaskBoard";
@@ -10,11 +12,17 @@ import type { StagePlacement } from "./components/StageAddCard";
 import { PROJECT_STAGES } from "./data/projects";
 import { isCompleteStatus, isPastDue, progressAfterStatus, statusOverrideAfterProgress, tasksForProject, type ProjectTask, type TaskStatus } from "./data/tasks";
 import type { TemplatePresetNode } from "./data/templatePresets";
-import { managerName } from "./data/managers";
+import { managerNames } from "./data/managers";
 import type { MeResponse, Project } from "./types";
+import { replaceProjectView, type ProjectView } from "./useHashRoute";
 
 /** 阶段名（不含「项目总览」汇总视图）。 */
 const STAGE_NAMES: readonly string[] = PROJECT_STAGES.filter((stage) => stage !== "项目总览");
+
+/** 两份项目经理名单是否一致（顺序敏感：名单顺序就是展示顺序，Push 136）。 */
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
 
 /**
  * 阶段序号（Push 111）：展示顺序以**阶段为主键**，顺序就是项目总览的分组顺序（售前规划 → … → 验收）。
@@ -27,9 +35,21 @@ function stageRankOf(stage: string): number {
 
 /**
  * 顶部视图标签（Push 82 定稿）：阶段标签不再各占一格，改成「项目总览 + 两块看板」；
- * Push 128：再往后加第四个视图「日报及问题」（口径见 components/ReportIssuePanel.tsx）。
+ * Push 128：再往后加第四个视图「日报及问题」（口径见 components/ReportIssuePanel.tsx）；
+ * Push 142：「项目总览」之后再加「甘特图」（口径见 components/GanttChart.tsx）；
+ * Push 154：当前标签走地址 `?view=`，刷新 / 收藏 / 分享都停在同一块标签。
  */
-const VIEW_TABS: readonly string[] = ["项目总览", "人员任务分配", "任务进展", "日报及问题"];
+const VIEW_TABS = ["项目总览", "甘特图", "人员任务分配", "任务进展", "日报及问题"] as const;
+type ViewTab = (typeof VIEW_TABS)[number];
+
+/** 顶部标签 ↔ 地址参数（`?view=`）：缺省「项目总览」（overview）不落参数。 */
+const VIEW_KEYS: Record<ViewTab, ProjectView> = {
+  "项目总览": "overview",
+  "甘特图": "gantt",
+  "人员任务分配": "owners",
+  "任务进展": "progress",
+  "日报及问题": "daily",
+};
 
 /** 从任务模板预设加进来的任务：字段先给默认值（负责人 / 日期等留空，后续在任务详情里补）。 */
 function taskFromPresetNode(stage: string, node: TemplatePresetNode): ProjectTask {
@@ -38,8 +58,8 @@ function taskFromPresetNode(stage: string, node: TemplatePresetNode): ProjectTas
     stage,
     title: node.title,
     titleEn: node.titleEn,
-    owner: "",
-    ownerEn: "",
+    owners: [],
+    ownersEn: [],
     status: "待开始",
     progress: 0,
     startDate: "",
@@ -47,7 +67,7 @@ function taskFromPresetNode(stage: string, node: TemplatePresetNode): ProjectTas
     doneDate: "",
     days: 0,
     deliverable: "",
-    change: "",
+    changes: [],
     onTime: "",
     note: "",
     headcount: 0,
@@ -59,15 +79,15 @@ function taskFromPresetNode(stage: string, node: TemplatePresetNode): ProjectTas
 let quickTaskSeq = 0;
 
 /** 看板「添加 → 临时任务」建的任务（Push 86）：标题 / 英文名由用户自己填，负责人 / 状态按所在列给（阶段留空 → 项目总览里落在「未分组」）。 */
-function quickTask(group: { owner: string; ownerEn: string; status: TaskStatus }, title: string, titleEn: string): ProjectTask {
+function quickTask(group: { owners: string[]; ownersEn: string[]; status: TaskStatus }, title: string, titleEn: string): ProjectTask {
   quickTaskSeq += 1;
   return {
     id: "quick-" + String(quickTaskSeq) + "-" + String(Date.now()),
     stage: "",
     title,
     titleEn,
-    owner: group.owner,
-    ownerEn: group.ownerEn,
+    owners: group.owners,
+    ownersEn: group.ownersEn,
     status: group.status,
     statusOverride: group.status,
     progress: progressAfterStatus(group.status, 0),
@@ -76,7 +96,7 @@ function quickTask(group: { owner: string; ownerEn: string; status: TaskStatus }
     doneDate: "",
     days: 0,
     deliverable: "",
-    change: "",
+    changes: [],
     onTime: "",
     note: "",
     headcount: 0,
@@ -88,15 +108,17 @@ function quickTask(group: { owner: string; ownerEn: string; status: TaskStatus }
 type ProjectDetailProps = {
   me: MeResponse;
   project: Project | null;
-  /** 任务编辑里改「项目经理」时回写项目（项目经理是项目级字段）。 */
-  onChangeManager?: (projectId: string, managerId: string) => void;
+  /** 顶部标签的当前视图（Push 154 起由地址 `?view=` 派生，缺省「项目总览」）。 */
+  view: ProjectView;
+  /** 任务编辑里改「项目经理」时回写项目（项目经理是项目级字段，Push 136 起可多位）。 */
+  onChangeManagers?: (projectId: string, managerIds: string[]) => void;
   /** 任务字段被编辑（按口径刷新项目时间 updatedAt）。 */
   onTaskEdited?: (projectId: string) => void;
 };
 
-export default function ProjectDetail({ me, project, onChangeManager, onTaskEdited }: ProjectDetailProps) {
-  /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」。 */
-  const [activeView, setActiveView] = useState<string>(VIEW_TABS[0]);
+export default function ProjectDetail({ me, project, view, onChangeManagers, onTaskEdited }: ProjectDetailProps) {
+  /** 顶部视图（Push 82 / 121）：阶段标签收进「项目总览」，另两块是看板视图，最后一块是「日报及问题」；Push 154 起当前标签由地址 `?view=` 派生。 */
+  const activeView = VIEW_TABS.find((tab) => VIEW_KEYS[tab] === view) ?? VIEW_TABS[0];
   const [progressOverrides, setProgressOverrides] = useState<Record<string, number>>({});
   /** 任务编辑保存的字段（负责人 / 日期 / 施工人数 / 紧急重要度 / 进展描述；原型阶段存浏览器内存）。 */
   const [taskEdits, setTaskEdits] = useState<Record<string, Partial<ProjectTask>>>({});
@@ -105,6 +127,8 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
    * 原型阶段存浏览器内存（与任务覆盖表同一层），换项目 / 刷新即重置 —— 正式版由后端落库（见 `前端功能需求.md` §3.8 A19）。
    */
   const [taskOrder, setTaskOrder] = useState<string[]>([]);
+  /** 任务表行内删除（Push 141，原型内存态：只从项目列表移除，刷新 / 换项目即复位 —— 正式版走任务删除接口，见 `前端功能需求.md` §3.8 A25）。 */
+  const [deletedTaskIds, setDeletedTaskIds] = useState<string[]>([]);
 
   /** 原型阶段只有印度项目（`inmu-0010`）带示例任务数据；其余项目为空列表（正式版按项目取数）。 */
   const baseTasks = tasksForProject(project?.id ?? "");
@@ -115,8 +139,9 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
     setProgressOverrides({});
     setTaskEdits({});
     setTaskOrder([]);
+    setDeletedTaskIds([]);
   }, [project?.id]);
-  const projectTasks = [...baseTasks, ...addedTasks];
+  const projectTasks = [...baseTasks, ...addedTasks].filter((task) => !deletedTaskIds.includes(task.id));
 
   /**
    * 看板顺序（Push 105）：排过的按 `taskOrder` 走，没排过的（新加的任务等）接在后面、保持原有先后（稳定排序）。
@@ -155,6 +180,11 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
    * 点四格进度条：进度 + 联动状态一起写（0 格 = 待开始、1~3 格 = 进行中、4 格 = 交回完成态派生，Push 65；
    * Push 67 修正：已过预计完成日期的任务点进度条保持「已延期」，不会被改成「待开始 / 进行中」）。
    */
+  /** 任务表行内删除（Push 141）：把任务从本项目列表移除（原型存内存，换项目 / 刷新复位；正式版见 `前端功能需求.md` §3.8 A25）。 */
+  const handleDeleteTask = (taskId: string) => {
+    setDeletedTaskIds((previous) => (previous.includes(taskId) ? previous : [...previous, taskId]));
+  };
+
   const handleSetProgress = (taskId: string, progress: number) => {
     const current = tasks.find((task) => task.id === taskId);
     const nextStatus = statusOverrideAfterProgress(progress, current !== undefined && isPastDue(current));
@@ -197,14 +227,14 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
     if (project === null) {
       return;
     }
-    if (values.managerId !== "" && values.managerId !== project.managerId) {
-      onChangeManager?.(project.id, values.managerId);
+    if (values.managerIds.length > 0 && !sameIds(values.managerIds, project.managerIds)) {
+      onChangeManagers?.(project.id, values.managerIds);
     }
     setTaskEdits((previous) => ({
       ...previous,
       [values.taskId]: {
-        owner: values.owner,
-        ownerEn: values.ownerEn,
+        owners: values.owners,
+        ownersEn: values.ownersEn,
         startDate: values.startDate,
         dueDate: values.dueDate,
         days: values.days,
@@ -230,12 +260,12 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
     onTaskEdited?.(project.id);
   };
 
-  /** 表格行内改「项目经理」：项目级字段，回写项目卡片。 */
-  const handleBoardManagerChange = (nextManagerId: string) => {
-    if (project === null || nextManagerId === project.managerId) {
+  /** 表格行内改「项目经理」：项目级字段（多位，Push 136），回写项目卡片。 */
+  const handleBoardManagerChange = (nextManagerIds: string[]) => {
+    if (project === null || sameIds(nextManagerIds, project.managerIds)) {
       return;
     }
-    onChangeManager?.(project.id, nextManagerId);
+    onChangeManagers?.(project.id, nextManagerIds);
   };
 
   /** 从「任务模板」预设加一个节点到项目：模板里已加过的节点按 id 判重，不重复加。 */
@@ -313,8 +343,8 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
       ...previous,
       ...fresh.map((node) => ({
         ...taskFromPresetNode(stage, node),
-        owner: context.owner,
-        ownerEn: context.ownerEn,
+        owners: context.owners,
+        ownersEn: context.ownersEn,
         status: context.status,
         statusOverride: context.status,
         progress: progressAfterStatus(context.status, 0),
@@ -326,13 +356,18 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
     }
   };
 
-  /** 项目经理：项目级字段，取项目卡片上的经理（`managerId` → 姓名），任务表「项目经理」列与任务详情都用它。 */
-  const manager = project === null ? "" : managerName(project.managerId);
+  /** 项目经理：项目级字段，取项目卡片上的名单（`managerIds` → 姓名，多位按「、」连接），任务表「项目经理」列与任务详情都用它。 */
+  const managers = project === null ? "" : managerNames(project.managerIds);
 
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [tableOverflow, setTableOverflow] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumns>(() => ({ ...DEFAULT_VISIBLE_COLUMNS }));
+  /**
+   * 醒目模式（Push 134，业务口径「默认不启用」）：打开后项目总览的每张任务卡片整行铺该任务状态的底色；
+   * 关掉 = 保持现状。原型阶段存浏览器内存（换项目时保留、刷新回默认关），正式版口径见 `前端功能需求.md` §6.13。
+   */
+  const [focusMode, setFocusMode] = useState(false);
   const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
   /**
    * 阶段骨架常显（Push 61 调整）：没有任务的阶段也保留分组头（只有阶段名、组内没有任务行），
@@ -383,13 +418,14 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
       <main className="w-full px-6 pb-10 pt-3">
         <div className="flex items-center gap-3 border-b border-zinc-200">
           <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-            {VIEW_TABS.map((view) => {
-              const active = view === activeView;
+            {VIEW_TABS.map((tab) => {
+              const active = tab === activeView;
               return (
                 <button
-                  key={view}
+                  key={tab}
                   type="button"
-                  onClick={() => setActiveView(view)}
+                  onClick={() => replaceProjectView(project.id, VIEW_KEYS[tab])}
+                  aria-current={active ? "page" : undefined}
                   className={
                     "whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition " +
                     (active
@@ -397,13 +433,16 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
                       : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800")
                   }
                 >
-                  {view}
+                  {tab}
                 </button>
               );
             })}
           </div>
           {activeView === "项目总览" ? (
-            <ColumnPicker visible={visibleColumns} onToggle={handleToggleColumn} onReset={resetColumns} />
+            <div className="flex shrink-0 items-center gap-4">
+              <FocusModeToggle checked={focusMode} onToggle={setFocusMode} />
+              <ColumnPicker visible={visibleColumns} onToggle={handleToggleColumn} onReset={resetColumns} />
+            </div>
           ) : null}
         </div>
 
@@ -411,8 +450,11 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
           {activeView === "项目总览" ? (
             <>
               <ProjectSummary tasks={tasks} />
-              <TaskBoard tasks={tasks} skeletonStages={STAGE_NAMES} onSetProgress={handleSetProgress} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={handleAddNode} onAddNodes={handleAddNodes} viewStage="项目总览" manager={manager} managerId={project.managerId} onSubmitTaskEdit={handleSubmitTaskEdit} onPatchTask={handlePatchTask} onChangeManager={handleBoardManagerChange} />
+              <TaskBoard tasks={tasks} skeletonStages={STAGE_NAMES} onSetProgress={handleSetProgress} visibleColumns={visibleColumns} scrollRef={tableScrollRef} collapsed={collapsedStages} onToggleStage={toggleStage} onToggleAllStages={toggleAllStages} onAddNode={handleAddNode} onAddNodes={handleAddNodes} viewStage="项目总览" managers={managers} managerIds={project.managerIds} onSubmitTaskEdit={handleSubmitTaskEdit} onPatchTask={handlePatchTask} onChangeManagers={handleBoardManagerChange} onDeleteTask={handleDeleteTask} focusMode={focusMode} />
             </>
+          ) : activeView === "甘特图" ? (
+            // 甘特图（Push 142）：与项目总览同一份任务数据（含内存态新增 / 编辑 / 删除）；拖动改期 / 改进度写回同一张内存态覆盖表
+            <GanttChart tasks={tasks} onPatchTask={handlePatchTask} onSetProgress={handleSetProgress} />
           ) : activeView === "日报及问题" ? (
             // key = 项目 id：换项目时把日报 / 问题与填写草稿一起复位（原型内存态，见 ReportIssuePanel.tsx）
             <ReportIssuePanel key={project.id} project={project} me={me} tasks={tasks} />
@@ -420,8 +462,8 @@ export default function ProjectDetail({ me, project, onChangeManager, onTaskEdit
             <TaskKanban
               mode={activeView === "人员任务分配" ? "owner" : "status"}
               tasks={tasks}
-              manager={manager}
-              managerId={project.managerId}
+              managers={managers}
+              managerIds={project.managerIds}
               onAddTask={handleQuickAdd}
               onAddStageTask={handleKanbanAddNode}
               onSubmitTaskEdit={handleSubmitTaskEdit}
