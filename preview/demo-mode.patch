@@ -12,57 +12,51 @@ index 1c1f0f3..d1c9cf5 100644
    <body>
      <div id="root"></div>
 diff --git a/src/App.tsx b/src/App.tsx
-index ef72d86..bccf324 100644
+index 874cf4b..e1b6cd4 100644
 --- a/src/App.tsx
 +++ b/src/App.tsx
-@@ -7,6 +7,7 @@ import { apiFetch, redirectToLogin } from "./api";
+@@ -4,6 +4,7 @@ import Home from "./Home";
+ import PlaceholderPage from "./PlaceholderPage";
+ import ProjectDetail from "./ProjectDetail";
+ import { ApiError, apiFetch, redirectToLogin } from "./api";
++import { DEMO_MODE, DemoBanner } from "./demo";
  import { Loader } from "./components/Loader";
  import { ProjectModal, type ProjectDraft } from "./components/ProjectModal";
- import { INITIAL_PROJECTS } from "./data/projects";
-+import { DEMO_MODE, DemoBanner } from "./demo";
- import { useHashRoute } from "./useHashRoute";
- import { PROJECT_TYPE_ACCENTS } from "./types";
- import type { MeResponse, Project } from "./types";
-@@ -180,7 +181,13 @@ export default function App() {
-     );
- 
+ import type { DictTools } from "./dictTools";
+@@ -517,6 +518,7 @@ export default function App() {
    if (route.kind === "hub") {
--    return <Hub me={state.me} />;
-+    // 演示模式：提示带只挂在入口页（主页），内页不显示。
-+    return (
-+      <>
+     return (
+       <>
 +        {DEMO_MODE ? <DemoBanner /> : null}
-+        <Hub me={state.me} />
-+      </>
-+    );
-   }
- 
-   if (route.kind === "placeholder") {
+         <Hub me={state.me} />
+         {bottomBars}
+       </>
 diff --git a/src/api.ts b/src/api.ts
-index c248722..c1216e2 100644
+index effe4f5..291a5c9 100644
 --- a/src/api.ts
 +++ b/src/api.ts
-@@ -5,6 +5,8 @@
+@@ -5,6 +5,9 @@
   * 契约来源：shared/src/modules/identity.ts。
   */
  
-+import { DEMO_MODE, demoMeResponse } from "./demo";
++import { DEMO_MODE } from "./demo";
++import { demoFetch } from "./demo/server";
 +
  const CSRF_COOKIE = "ll_csrf";
  const CSRF_HEADER = "X-CSRF-Token";
  const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-@@ -24,6 +26,10 @@ export function readCookie(name: string): string | null {
+@@ -24,6 +27,10 @@ export function readCookie(name: string): string | null {
  
  /** fetch 封装：同源 Cookie + CSRF 头 + Accept: application/json。 */
  export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
-+  // 演示模式：预览站没有后端，会话校验由本地伪响应承担（见 src/demo.ts）。
-+  if (DEMO_MODE && input === "/auth/me") {
-+    return demoMeResponse();
++  // 演示模式：预览站没有后端，全部请求交给浏览器内的假后端（见 src/demo/server.ts）。
++  if (DEMO_MODE) {
++    return demoFetch(input, init);
 +  }
    const method = (init.method ?? "GET").toUpperCase();
    const headers = new Headers(init.headers);
    if (!headers.has("Accept")) {
-@@ -40,6 +46,10 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
+@@ -40,6 +47,10 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
  
  /** 跳 SSO 登录（带 returnTo，登录后回到当前页面）。 */
  export function redirectToLogin(): void {
@@ -127,7 +121,7 @@ index 20b0659..ccaedad 100644
              ) : null}
            </div>
 diff --git a/vite.config.ts b/vite.config.ts
-index 58c05f5..764f237 100644
+index ab7ef62..650489d 100644
 --- a/vite.config.ts
 +++ b/vite.config.ts
 @@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
