@@ -5,3 +5,6 @@ dist/
 *.log
 *.rej
 *.orig
+
+# 本机走查（preview/verify-demo.mjs）的截图输出
+.verify-out/

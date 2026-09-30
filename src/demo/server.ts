@@ -6,6 +6,8 @@
  */
 import type { DemoNode, DemoProject, DemoTask, DemoTemplate } from "./database";
 import * as db from "./database";
+import { demoRoute } from "./routes";
+import * as store from "./store";
 
 export const DEMO_ME = {
   user: {
@@ -57,11 +59,14 @@ function taskView(task: DemoTask): DemoTask {
 
 function taskListItem(task: DemoTask) {
   const view = { ...taskView(task) };
-  const draft = view.files.filter((file) => file.status !== "final").length;
+  // 文件摘要按文件库现算（含本次会话上传 / 移入回收站的文件），与抽屉清单同源：
+  // 否则「共 N 份」会用任务快照里的种子数量，和上传后的清单行数对不上。
+  const files = store.taskFilesOf(task.projectId, task.id);
+  const draft = files.filter((file) => file.status !== "final").length;
   return {
     ...view,
     ownerNames: view.ownerIds.map((id) => db.userNameOf(id) ?? null),
-    fileSummary: { total: view.files.length, draft, final: view.files.length - draft },
+    fileSummary: { total: files.length, draft, final: files.length - draft },
   };
 }
 
@@ -347,6 +352,10 @@ export async function demoFetch(input: string, init: RequestInit = {}): Promise<
       if (typeof body.focusMode === "boolean") {
         db.preferences.focusMode = body.focusMode;
       }
+      if (typeof body.workspaceOpenProjects === "object" && body.workspaceOpenProjects !== null) {
+        const value = body.workspaceOpenProjects as { tasks?: unknown; raised?: unknown };
+        db.preferences.workspaceOpenProjects = { tasks: stringList(value.tasks), raised: stringList(value.raised) };
+      }
       db.preferences.updatedAt = new Date().toISOString();
       return json(db.preferences);
     }
@@ -571,7 +580,7 @@ export async function demoFetch(input: string, init: RequestInit = {}): Promise<
         return fail(404, "TASK_NOT_FOUND", "任务不存在");
       }
       if (rest.length === 2 && method === "GET") {
-        return json({ ...taskView(task), ownerNames: task.ownerIds.map((id) => db.userNameOf(id) ?? null), files: task.files });
+        return json({ ...taskView(task), ownerNames: task.ownerIds.map((id) => db.userNameOf(id) ?? null), files: store.taskFilesOf(project.id, taskId) });
       }
       if (rest.length === 2 && method === "PATCH") {
         if (numberOrNull(body.version) !== task.version) {
@@ -759,6 +768,11 @@ export async function demoFetch(input: string, init: RequestInit = {}): Promise<
       db.templates.splice(db.templates.indexOf(template), 1);
       return json({ id: template.id, deletedAt: new Date().toISOString() });
     }
+  }
+
+  const extra = demoRoute(method, parts, query, body);
+  if (extra !== null) {
+    return extra;
   }
 
   console.warn("[demo] 假后端未覆盖的请求：" + method + " " + url.pathname);

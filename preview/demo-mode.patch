@@ -12,18 +12,18 @@ index 1c1f0f3..d1c9cf5 100644
    <body>
      <div id="root"></div>
 diff --git a/src/App.tsx b/src/App.tsx
-index 874cf4b..e1b6cd4 100644
+index fbfec54..a34bd75 100644
 --- a/src/App.tsx
 +++ b/src/App.tsx
-@@ -4,6 +4,7 @@ import Home from "./Home";
- import PlaceholderPage from "./PlaceholderPage";
+@@ -5,6 +5,7 @@ import PlaceholderPage from "./PlaceholderPage";
  import ProjectDetail from "./ProjectDetail";
+ import WorkspacePage from "./WorkspacePage";
  import { ApiError, apiFetch, redirectToLogin } from "./api";
 +import { DEMO_MODE, DemoBanner } from "./demo";
  import { Loader } from "./components/Loader";
  import { ProjectModal, type ProjectDraft } from "./components/ProjectModal";
  import type { DictTools } from "./dictTools";
-@@ -517,6 +518,7 @@ export default function App() {
+@@ -545,6 +546,7 @@ export default function App() {
    if (route.kind === "hub") {
      return (
        <>
@@ -68,7 +68,7 @@ index effe4f5..291a5c9 100644
    window.location.replace("/auth/login?returnTo=" + encodeURIComponent(returnTo));
  }
 diff --git a/src/components/AppHeader.tsx b/src/components/AppHeader.tsx
-index 20b0659..ccaedad 100644
+index 2356952..0bdc1f2 100644
 --- a/src/components/AppHeader.tsx
 +++ b/src/components/AppHeader.tsx
 @@ -1,5 +1,6 @@
@@ -77,8 +77,8 @@ index 20b0659..ccaedad 100644
 +import { DEMO_MODE } from "../demo";
  import { clearHomePrefs } from "../homePrefs";
  import { goBackToList, goUpLevel, listHref, upLevelHref } from "../useHashRoute";
- import type { MeResponse, Project } from "../types";
-@@ -56,7 +57,7 @@ export function AppHeader({ me, project, title }: AppHeaderProps) {
+ import { TopNav } from "./TopNav";
+@@ -56,7 +57,7 @@ export function AppHeader({ me, project }: AppHeaderProps) {
      <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur">
        <div className="flex h-16 items-center gap-3 px-6">
          <a href={upHref} onClick={interceptNav(goUpLevel)} title="返回上一层级" className="flex shrink-0 items-center gap-3">
@@ -87,7 +87,7 @@ index 20b0659..ccaedad 100644
            <div className="leading-tight">
              <p className="text-base font-semibold text-zinc-900">LibiaoLink</p>
              <p className="text-xs text-zinc-500">立镖全链路信息平台</p>
-@@ -101,17 +102,21 @@ export function AppHeader({ me, project, title }: AppHeaderProps) {
+@@ -101,17 +102,21 @@ export function AppHeader({ me, project }: AppHeaderProps) {
                  role="menu"
                  className="menu-pop absolute right-0 top-full z-20 mt-2 w-36 overflow-hidden rounded-xl border border-zinc-200/80 bg-white p-1 shadow-[0_18px_40px_-12px_rgba(15,23,42,0.30),0_4px_12px_-4px_rgba(15,23,42,0.14)]"
                >

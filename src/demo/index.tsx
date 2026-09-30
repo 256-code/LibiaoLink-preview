@@ -6,7 +6,12 @@
  * 开关：VITE_DEMO_MODE（默认开启，见仓库根 .env）。
  */
 
+import { installDemoUploadBridge } from "./upload";
+
 export * from "./server";
+
+// 模块副作用：装上上传桥接（拦截原生 fetch 的分片 PUT），只装一次。
+installDemoUploadBridge();
 
 /** 演示模式开关：预览仓构建默认开启，只有 VITE_DEMO_MODE=false 才关闭。 */
 export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== "false";

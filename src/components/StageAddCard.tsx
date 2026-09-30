@@ -192,6 +192,11 @@ type StageAddCardProps = {
   /** 加一批 + 指定插入位置（看板那条路径）；templateId = 这批来自哪块模板（有它时上层走模板实例化接口，整套同事务）。 */
   onAddNodes?: (stage: string, nodes: readonly TemplatePresetNode[], placement: StagePlacement, templateId?: string) => void;
   /**
+   * Push 207 撤（业务口径 2026-09-28「临时任务不应该存在于阶段里面新建」）：本卡片原常驻的「临时任务
+   * （没有模板 · 自己填名称）」入口（Push 197）整体下架 —— 阶段面板只出节点 / 模板两类来源；
+   * 临时任务的常驻入口仍留在项目总览底部「临时任务」分组头与看板列底「添加」菜单（都不属于阶段面板）。
+   */
+  /**
    * 插入位置（Push 113，业务口径「我要点击这个添加后选择位置」）：给了就「**点 ＋ 添加 → 先弹位置浮层 → 选完才加进项目**」。
    * 浮层里前两档固定（该阶段最后（默认）/ 该阶段最前），下面按当前阶段的任务顺序列一遍（点一条 = 插到它后面）；
    * 不传 = 点一条直接加（项目总览那条路径，默认排该阶段最后）。
@@ -212,6 +217,8 @@ type StageAddCardProps = {
  * 关卡片 = 右上 × / `Esc` / **点卡片外的空白处** / **再点同一个阶段标签**；换阶段标签或换项目时也会自动关掉（由 TaskBoard 控制）。
  */
 export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, onAddNodes, placement, onClose, style }: StageAddCardProps) {
+  /** Push 207：原「常驻临时任务入口」的展开态（tempOpen）随入口一并下架。 */
+
   /** 点了「＋ 添加」/「整套添加」之后、还没选位置的那一次（Push 113）：`nodes` = 这次要加的一条 / 一批，`anchor` = 贴哪一行浮出。 */
   const [armed, setArmed] = useState<{ nodes: readonly TemplatePresetNode[]; anchor: HTMLElement; templateId?: string } | null>(null);
   /**
@@ -237,7 +244,7 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
   const [activeTab, setActiveTab] = useState("nodes");
   const cardRef = useRef<HTMLElement | null>(null);
 
-  // 换阶段（点了别的阶段标签）时回到第一个标签
+  // 换阶段（点了别的阶段标签）时回到第一个标签（Push 207：原「收起临时任务表单」随入口下架）
   useEffect(() => {
     setActiveTab("nodes");
   }, [stage]);
@@ -466,6 +473,8 @@ export function StageAddCard({ stage, addedNodeKeys, addedNodeIds, onAddNode, on
           <SequentialToggle checked={sequential} onChange={setSequential} />
         </div>
       </div>
+
+      {/* Push 207 撤：本卡片原「常驻临时任务入口」整块在此，按业务口径「临时任务不应该存在于阶段里面新建」下架。 */}
 
       {listNotice !== null ? (
         <p className="mt-2 flex min-h-0 flex-1 items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-200 px-3 text-center text-xs text-zinc-500">

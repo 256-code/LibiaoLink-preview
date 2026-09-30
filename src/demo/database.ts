@@ -96,6 +96,7 @@ export type DemoPreferences = {
   taskTableHiddenColumns: string[];
   homeSavedFilters: unknown[];
   focusMode: boolean;
+  workspaceOpenProjects: { tasks: string[]; raised: string[] };
   updatedAt: string | null;
 };
 
@@ -215,6 +216,7 @@ export const preferences: DemoPreferences = {
   taskTableHiddenColumns: [],
   homeSavedFilters: [],
   focusMode: false,
+  workspaceOpenProjects: { tasks: [], raised: [] },
   updatedAt: null,
 };
 
